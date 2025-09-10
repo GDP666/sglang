@@ -448,7 +448,7 @@ TORCH_LIBRARY_FRAGMENT(sgl_kernel, m) {
 
   m.def(
       "fused_rs_ln_ag_cta(Tensor! input, Tensor! residual, Tensor weight, "
-      "int mcptr, int signal_pads, int rank, int world_size, int MAX_CTAS, "
+      "int mcptr, int residual_mcptr, int signal_pads, int rank, int world_size, int MAX_CTAS, "
       "float epsilon) -> ()");
   m.impl("fused_rs_ln_ag_cta", torch::kCUDA,
              &fused_rs_ln_ag_cta);

@@ -72,6 +72,7 @@ if _is_npu:
 # 添加对称内存相关的全局变量
 _global_symm_mem_hdl = None
 _global_staging_buffer = None
+_global_residual_symm_mem_hdl = None
 _global_residual_buffer = None
 _global_max_ctas = None
 _symm_mem_initialized = False
@@ -80,7 +81,7 @@ def initialize_global_symm_memory(hidden_size):
     """
     全局初始化对称内存，只执行一次
     """
-    global _global_symm_mem_hdl, _global_staging_buffer, _global_residual_buffer, _global_max_ctas, _symm_mem_initialized
+    global _global_symm_mem_hdl, _global_staging_buffer, _global_residual_buffer, _global_residual_symm_mem_hdl, _global_max_ctas, _symm_mem_initialized
     
     # 如果已经初始化且不强制重新初始化，直接返回
     if _symm_mem_initialized:
@@ -117,7 +118,13 @@ def initialize_global_symm_memory(hidden_size):
             _global_staging_buffer, 
             device_group
         )
-        _global_residual_buffer = torch.empty_like(_global_staging_buffer)
+        # 为residual创建独立的对称内存区域
+        _global_residual_buffer = symm_mem.empty(
+            (CHUNK_SIZE, hidden_size),
+            device="cuda", 
+            dtype=torch.bfloat16
+        )
+        _global_residual_symm_mem_hdl = symm_mem.rendezvous(_global_residual_buffer, device_group)
         
         # 设置MAX_CTAS（可以根据GPU架构调整）
         _global_max_ctas = 16
@@ -134,7 +141,7 @@ def initialize_global_symm_memory(hidden_size):
 
 def fused_rs_ln_ag_cta(
     x: torch.Tensor, residual: torch.Tensor, weight: torch.Tensor,
-    symm_mem_hdl, rank: int, world_size: int, MAX_CTAS: int, offset: int,
+    symm_mem_hdl, residual_symm_mem_hdl, rank: int, world_size: int, MAX_CTAS: int, offset: int,
     variance_epsilon: float) -> Tuple[torch.Tensor, torch.Tensor]:    
     import sgl_kernel
     sgl_kernel.fused_rs_ln_ag_cta(
@@ -142,6 +149,7 @@ def fused_rs_ln_ag_cta(
             residual,
             weight,
             symm_mem_hdl.multicast_ptr + offset,
+            residual_symm_mem_hdl.multicast_ptr + offset,
             symm_mem_hdl.signal_pad_ptrs_dev,
             rank,
             world_size,
@@ -362,6 +370,7 @@ class RMSNorm(CustomOp):
                     _global_residual_buffer[start_idx : end_idx],
                     self.weight.data,
                     _global_symm_mem_hdl,
+                    _global_residual_symm_mem_hdl,
                     rank,
                     world_size,
                     16,

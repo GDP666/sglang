@@ -83,6 +83,7 @@ fused_rs_ln_ag_cta_kernel(
     scalar_t *__restrict__ input,        // [..., hidden_size]
     scalar_t *__restrict__ mcptr,        // [..., hidden_size] multimem_ptr
     scalar_t *__restrict__ residual,     // [..., hidden_size]
+    scalar_t *__restrict__ residual_mcptr,
     const scalar_t *__restrict__ weight, // [hidden_size]
     uint32_t **signal_pads,
     size_t rank,
@@ -131,6 +132,8 @@ fused_rs_ln_ag_cta_kernel(
       temp += residual_o[idx];
       variance[0] += temp.sum_squares(); // FP32 accumulation
       residual_o[idx] = temp;
+      multimem_st<16>(residual_mcptr + offset_scalar + idx * width, 
+                     *(reinterpret_cast<Vec<16> *>(&temp)));
     }
 
     blockReduceSum<float, 1>(variance);
@@ -166,6 +169,7 @@ fused_rs_ln_ag_cta_kernel(
     scalar_t *__restrict__ input,        // [..., hidden_size]
     scalar_t *__restrict__ mcptr,        // [..., hidden_size] multimem_ptr
     scalar_t *__restrict__ residual,     // [..., hidden_size]
+    scalar_t *__restrict__ residual_mcptr,
     const scalar_t *__restrict__ weight, // [hidden_size]
     uint32_t **signal_pads,
     size_t rank,
@@ -212,6 +216,7 @@ void rms_norm_inplace(torch::Tensor &out,    // [..., hidden_size]
                                                                   <<<grid, block, 0, stream>>>(input.data_ptr<scalar_t>(),                 \
                                                                                                reinterpret_cast<scalar_t *>(mcptr),        \
                                                                                                residual.data_ptr<scalar_t>(),              \
+                                                                                               reinterpret_cast<scalar_t *>(residual_mcptr),\
                                                                                                weight.data_ptr<scalar_t>(),                \
                                                                                                reinterpret_cast<uint32_t **>(signal_pads), \
                                                                                                static_cast<size_t>(rank),                  \
@@ -221,6 +226,7 @@ void fused_rs_ln_ag_cta(torch::Tensor &input,    // [..., hidden_size]
                         torch::Tensor &residual, // [..., hidden_size]
                         torch::Tensor &weight,   // [hidden_size]
                         int64_t mcptr,           // [..., hidden_size] multimem_ptr
+                        int64_t residual_mcptr,
                         int64_t signal_pads,     // [..., hidden_size] signal pads
                         int64_t rank,
                         int64_t world_size,

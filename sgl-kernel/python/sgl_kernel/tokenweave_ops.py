@@ -17,6 +17,7 @@ def fused_rs_ln_ag_cta(
     residual: torch.Tensor,
     weight: torch.Tensor,
     mcptr: int,
+    residual_mcptr: int,
     signal_pads: int,
     rank: int,
     world_size: int,
@@ -25,7 +26,7 @@ def fused_rs_ln_ag_cta(
 ) -> None:
     """Fused ReduceScatter + LayerNorm + AllGather CTA-based kernel"""
     torch.ops.sgl_kernel.fused_rs_ln_ag_cta.default(
-        input, residual, weight, mcptr, signal_pads, rank, world_size, MAX_CTAS, epsilon
+        input, residual, weight, mcptr, residual_mcptr, signal_pads, rank, world_size, MAX_CTAS, epsilon
     )
 
 
