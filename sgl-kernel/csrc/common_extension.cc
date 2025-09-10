@@ -436,6 +436,61 @@ TORCH_LIBRARY_FRAGMENT(sgl_kernel, m) {
 
   m.def("copy_to_gpu_no_ce(Tensor input, Tensor! output) -> ()");
   m.impl("copy_to_gpu_no_ce", torch::kCUDA, &copy_to_gpu_no_ce);
+
+  /*
+   * From csrc/tokenweave_ops
+   */
+  // TokenWeave Kernels
+  m.def(
+      "rms_norm_inplace(Tensor! result, Tensor! input, Tensor weight, float epsilon) -> "
+      "()");
+  m.impl("rms_norm_inplace", torch::kCUDA, &rms_norm_inplace);
+
+  m.def(
+      "fused_rs_ln_ag_cta(Tensor! input, Tensor! residual, Tensor weight, "
+      "int mcptr, int signal_pads, int rank, int world_size, int MAX_CTAS, "
+      "float epsilon) -> ()");
+  m.impl("fused_rs_ln_ag_cta", torch::kCUDA,
+             &fused_rs_ln_ag_cta);
+  
+  // TokenWeave Artifact Kernels
+  m.def(
+      "fused_add_rms_norm_cta(Tensor! input, Tensor! residual, Tensor weight, "
+      "int MAX_CTAS, float epsilon) -> ()");
+  m.impl("fused_add_rms_norm_cta", torch::kCUDA,
+             &fused_add_rms_norm_cta);
+
+  m.def(
+      "fused_rs_ln_cta(Tensor! input, Tensor! residual, Tensor weight, "
+      "int mcptr, int signal_pads, int rank, int world_size, int MAX_CTAS, "
+      "float epsilon) -> ()");
+  m.impl("fused_rs_ln_cta", torch::kCUDA,
+                &fused_rs_ln_cta);
+
+  m.def(
+      "multimem_ar_cta(Tensor input, int mcptr, int signal_pads, "
+      "int rank, int world_size, int MAX_CTAS) -> ()");
+  m.impl("multimem_ar_cta", torch::kCUDA,
+             &multimem_ar_cta);
+
+  m.def(
+      "multimem_rs_cta(Tensor input, int mcptr, int signal_pads, "
+      "int rank, int world_size, int MAX_CTAS) -> ()");
+  m.impl("multimem_rs_cta", torch::kCUDA,
+             &multimem_rs_cta);
+
+  m.def(
+      "multimem_ag_cta(Tensor input, int mcptr, int signal_pads, "
+      "int rank, int world_size, int MAX_CTAS) -> ()");
+  m.impl("multimem_ag_cta", torch::kCUDA,
+             &multimem_ag_cta);
+
+  m.def(
+      "simple_fusion_rs_ln_ag_cta(Tensor! input, Tensor! residual, Tensor weight, "
+      "int mcptr, int signal_pads, int rank, int world_size, int MAX_CTAS, "
+      "float epsilon) -> ()");
+  m.impl("simple_fusion_rs_ln_ag_cta", torch::kCUDA,
+                &simple_fusion_rs_ln_ag_cta);
 }
 
 REGISTER_EXTENSION(common_ops)

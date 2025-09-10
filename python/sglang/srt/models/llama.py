@@ -190,12 +190,13 @@ class LlamaAttention(nn.Module):
         positions: torch.Tensor,
         hidden_states: torch.Tensor,
         forward_batch: ForwardBatch,
+        use_reduce_scatter: bool = False,
     ) -> torch.Tensor:
         qkv, _ = self.qkv_proj(hidden_states)
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
         q, k = self.rotary_emb(positions, q, k)
         attn_output = self.attn(q, k, v, forward_batch)
-        output, _ = self.o_proj(attn_output)
+        output, _ = self.o_proj(attn_output, skip_all_reduce=use_reduce_scatter)
         return output
 
 
@@ -257,21 +258,53 @@ class LlamaDecoderLayer(nn.Module):
         forward_batch: ForwardBatch,
         residual: Optional[torch.Tensor],
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        # Self Attention
-        if residual is None:
-            residual = hidden_states
-            hidden_states = self.input_layernorm(hidden_states)
+        if (
+            residual is not None
+            and hasattr(hidden_states, "_sglang_needs_allreduce_fusion")
+            and hidden_states._sglang_needs_allreduce_fusion
+        ):
+            # print("use allreduce fusion")
+            hidden_states, residual = (
+                self.input_layernorm.forward_with_allreduce_fusion(
+                    hidden_states, residual
+                )
+            )
         else:
-            hidden_states, residual = self.input_layernorm(hidden_states, residual)
+            if residual is None:
+                residual = hidden_states
+                hidden_states = self.input_layernorm(hidden_states)
+            else:
+                hidden_states, residual = self.input_layernorm(
+                    hidden_states, residual
+                )
+        # Self Attention
+        # if residual is None:
+        #     residual = hidden_states
+        #     hidden_states = self.input_layernorm(hidden_states)
+        # else:
+        #     hidden_states, residual = self.input_layernorm(hidden_states, residual)
         hidden_states = self.self_attn(
             positions=positions,
             hidden_states=hidden_states,
             forward_batch=forward_batch,
+            use_reduce_scatter=True,
         )
-
+        hidden_states._sglang_needs_allreduce_fusion = True
         # Fully Connected
-        hidden_states, residual = self.post_attention_layernorm(hidden_states, residual)
-        hidden_states = self.mlp(hidden_states)
+        if (
+            residual is not None
+            and hasattr(hidden_states, "_sglang_needs_allreduce_fusion")
+            and hidden_states._sglang_needs_allreduce_fusion
+        ):
+            # print("use allreduce fusion")
+            hidden_states, residual = (
+                self.post_attention_layernorm.forward_with_allreduce_fusion(
+                    hidden_states, residual
+                )
+            )
+        # hidden_states, residual = self.post_attention_layernorm(hidden_states, residual)
+        hidden_states = self.mlp(hidden_states, use_reduce_scatter=True)
+        hidden_states._sglang_needs_allreduce_fusion = True
         return hidden_states, residual
 
 
@@ -345,7 +378,8 @@ class LlamaModel(nn.Module):
                 forward_batch,
                 residual,
             )
-
+        # print("before hidden_states", hidden_states.shape, hidden_states)
+        # print("before residual", residual.shape, residual)
         if not self.pp_group.is_last_rank:
             return PPProxyTensors(
                 {
@@ -354,8 +388,14 @@ class LlamaModel(nn.Module):
                 }
             )
         else:
-            hidden_states, _ = self.norm(hidden_states, residual)
-
+            hidden_states, _ = (
+                self.norm.forward_with_allreduce_fusion(
+                    hidden_states, residual
+                )
+            )
+            # hidden_states, _ = self.norm(hidden_states, residual)
+        # print("hidden_states", hidden_states.shape, hidden_states)
+        # print("residual", residual.shape, residual)
         if len(aux_hidden_states) == 0:
             return hidden_states
 

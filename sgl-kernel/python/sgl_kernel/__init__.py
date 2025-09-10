@@ -99,6 +99,16 @@ from sgl_kernel.speculative import (
     verify_tree_greedy,
 )
 from sgl_kernel.top_k import fast_topk
+from sgl_kernel.tokenweave_ops import (
+    fused_add_rms_norm_cta,
+    fused_rs_ln_ag_cta,
+    fused_rs_ln_cta,
+    multimem_ag_cta,
+    multimem_ar_cta,
+    multimem_rs_cta,
+    rms_norm_inplace,
+    simple_fusion_rs_ln_ag_cta,
+)
 from sgl_kernel.version import __version__
 
 
