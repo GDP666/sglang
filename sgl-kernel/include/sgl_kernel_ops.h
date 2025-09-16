@@ -747,8 +747,6 @@ std::vector<int64_t> create_greenctx_stream_by_value(int64_t smA, int64_t smB, i
  */
 void store_kv_cache(at::Tensor k_cache, at::Tensor v_cache, at::Tensor out_loc, at::Tensor k, at::Tensor v);
 
-void copy_to_gpu_no_ce(const at::Tensor& input, at::Tensor& output);
-
 /*
  * From csrc/tokeweave_ops
  */
