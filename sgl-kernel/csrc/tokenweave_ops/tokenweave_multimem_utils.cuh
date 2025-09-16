@@ -305,6 +305,7 @@ __device__ __inline__ Vec<Alignment> multimem_ld_reduce_add(T *mc_ptr)
 #endif
 
   SPECIALIZE_MULTIMEM_LD_REDUCE_VEC_32(at::BFloat16, ".bf16x2", ".acc::f32");
+  SPECIALIZE_MULTIMEM_LD_REDUCE_VEC_32(c10::Half, ".f16x2", ".acc::f32");
   SPECIALIZE_MULTIMEM_LD_REDUCE_VEC_32(float, ".f32", "");
 
   template <int Alignment, typename T>
