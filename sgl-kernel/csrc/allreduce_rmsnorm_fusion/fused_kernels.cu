@@ -13,7 +13,6 @@
 #include <ATen/cuda/CUDAContext.h>
 #include <torch/all.h>
 #include <cmath>
-#include "cuda_compat.h"
 
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 900) && CUDART_VERSION >= 12010
 #define NVCC_SUPPORTS_MULTICAST 1
@@ -24,66 +23,27 @@
 #include <cuda_bf16.h>
 #endif
 
-#include "tokenweave_multimem_utils.cuh"
+#include "multimem_utils.cuh"
 #include <cassert>
 
-namespace vllm
-{
-/*
-* ****************************************************** *
-* RMS NORM IN-PLACE KERNEL                               *
-* ****************************************************** * 
-*/ 
-template <typename scalar_t>
-__global__ void rms_norm_inplace_kernel(
-    scalar_t *__restrict__ out,          // [..., hidden_size]
-    scalar_t *__restrict__ input,        // [..., hidden_size] — will be updated in-place
-    const scalar_t *__restrict__ weight, // [hidden_size]
-    const float epsilon, const int num_tokens, const int hidden_size)
-{
 
-  __shared__ float s_variance;
-  float variance = 0.0f;
+//copy from https://github.com/microsoft/tokenweave/blob/main/csrc/tokenweave_fused_kernels.cu
 
-  // First pass: compute variance
-  for (int idx = threadIdx.x; idx < hidden_size; idx += blockDim.x)
-  {
-    const float x = (float)input[blockIdx.x * hidden_size + idx];
-    variance += x * x;
-  }
-
-  using BlockReduce = cub::BlockReduce<float, 1024>;
-  __shared__ typename BlockReduce::TempStorage reduceStore;
-  variance = BlockReduce(reduceStore).Reduce(variance, cub::Sum{}, blockDim.x);
-
-  if (threadIdx.x == 0)
-  {
-    s_variance = rsqrtf(variance / hidden_size + epsilon);
-  }
-  __syncthreads();
-
-  // Second pass: copy to out, normalize input in-place
-  for (int idx = threadIdx.x; idx < hidden_size; idx += blockDim.x)
-  {
-    float x = (float)input[blockIdx.x * hidden_size + idx];
-    out[blockIdx.x * hidden_size + idx] = x;                                            // copy original input to `out`
-    input[blockIdx.x * hidden_size + idx] = ((scalar_t)(x * s_variance)) * weight[idx]; // normalize in-place
-  }
-}
 
 /* 
 * ********************************************************* *
 * FUSED RS + RESIDUAL ADD + RMS NORM + AG CTA-BASED KERNEL  *
-* Function specialization in the case of BF16 tensors.      *
+* Function specialization in the case of BF16/FP16 tensors. *
 * ********************************************************* *
 */
+namespace vllm
+{
 template <typename scalar_t, int width>
 __global__ std::enable_if_t<(width > 0) && _typeConvert<scalar_t>::exists>
 fused_rs_ln_ag_cta_kernel(
     scalar_t *__restrict__ input,        // [..., hidden_size]
     scalar_t *__restrict__ mcptr,        // [..., hidden_size] multimem_ptr
     scalar_t *__restrict__ residual,     // [..., hidden_size]
-    scalar_t *__restrict__ residual_mcptr,
     const scalar_t *__restrict__ weight, // [hidden_size]
     uint32_t **signal_pads,
     size_t rank,
@@ -132,8 +92,8 @@ fused_rs_ln_ag_cta_kernel(
       temp += residual_o[idx];
       variance[0] += temp.sum_squares(); // FP32 accumulation
       residual_o[idx] = temp;
-      multimem_st<16>(residual_mcptr + offset_scalar + idx * width, 
-                     *(reinterpret_cast<Vec<16> *>(&temp)));
+      // multimem_st<16>(residual_mcptr + offset_scalar + idx * width, 
+      //                *(reinterpret_cast<Vec<16> *>(&temp)));
     }
 
     blockReduceSum<float, 1>(variance);
@@ -169,7 +129,6 @@ fused_rs_ln_ag_cta_kernel(
     scalar_t *__restrict__ input,        // [..., hidden_size]
     scalar_t *__restrict__ mcptr,        // [..., hidden_size] multimem_ptr
     scalar_t *__restrict__ residual,     // [..., hidden_size]
-    scalar_t *__restrict__ residual_mcptr,
     const scalar_t *__restrict__ weight, // [hidden_size]
     uint32_t **signal_pads,
     size_t rank,
@@ -179,31 +138,9 @@ fused_rs_ln_ag_cta_kernel(
     const int hidden_size)
 {
   /* Not supported */
-  assert(false && "TokenWeave currently only supports bf16 with width 8.");
+  assert(false && "TokenWeave currently only supports bf16/fp16 with width 8.");
 }
-} // namespace vllm
-
-
-/* 
-* RMS NORM IN-PLACE
-*/
-void rms_norm_inplace(torch::Tensor &out,    // [..., hidden_size]
-                      torch::Tensor &input,  // [..., hidden_size]
-                      torch::Tensor &weight, // [hidden_size]
-                      double epsilon)
-{
-  int hidden_size = input.size(-1);
-  int num_tokens = input.numel() / hidden_size;
-
-  dim3 grid(num_tokens);
-  dim3 block(std::min(hidden_size, 1024));
-  const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
-  const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-  VLLM_DISPATCH_FLOATING_TYPES(input.scalar_type(), "rms_norm_inplace_kernel", [&]
-                               { vllm::rms_norm_inplace_kernel<scalar_t><<<grid, block, 0, stream>>>(
-                                     out.data_ptr<scalar_t>(), input.data_ptr<scalar_t>(),
-                                     weight.data_ptr<scalar_t>(), epsilon, num_tokens, hidden_size); });
-}
+} //namespace vllm
 
 /* 
 * ******************************************************************* *
@@ -216,7 +153,6 @@ void rms_norm_inplace(torch::Tensor &out,    // [..., hidden_size]
                                                                   <<<grid, block, 0, stream>>>(input.data_ptr<scalar_t>(),                 \
                                                                                                reinterpret_cast<scalar_t *>(mcptr),        \
                                                                                                residual.data_ptr<scalar_t>(),              \
-                                                                                               reinterpret_cast<scalar_t *>(residual_mcptr),\
                                                                                                weight.data_ptr<scalar_t>(),                \
                                                                                                reinterpret_cast<uint32_t **>(signal_pads), \
                                                                                                static_cast<size_t>(rank),                  \
@@ -226,7 +162,6 @@ void fused_rs_ln_ag_cta(torch::Tensor &input,    // [..., hidden_size]
                         torch::Tensor &residual, // [..., hidden_size]
                         torch::Tensor &weight,   // [hidden_size]
                         int64_t mcptr,           // [..., hidden_size] multimem_ptr
-                        int64_t residual_mcptr,
                         int64_t signal_pads,     // [..., hidden_size] signal pads
                         int64_t rank,
                         int64_t world_size,

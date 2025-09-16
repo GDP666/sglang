@@ -262,6 +262,7 @@ endif()
 set(SOURCES
     "csrc/allreduce/custom_all_reduce.cu"
     "csrc/allreduce/mscclpp_allreduce.cu"
+    "csrc/allreduce_rmsnorm_fusion/fused_kernels.cu"
     "csrc/attention/cascade.cu"
     "csrc/attention/cutlass_mla_kernel.cu"
     "csrc/attention/lightning_attention_decode_kernel.cu"
@@ -330,8 +331,6 @@ set(SOURCES
     "${repo-flash-attention_SOURCE_DIR}/csrc/flash_attn/src/flash_fwd_sparse_hdim128_fp16_causal_sm80.cu"
     "${repo-flash-attention_SOURCE_DIR}/csrc/flash_attn/src/flash_fwd_sparse_hdim128_fp16_sm80.cu"
     "${repo-flash-attention_SOURCE_DIR}/csrc/flash_attn/flash_sparse_api.cpp"
-    "csrc/tokenweave_ops/tokenweave_artifact_kernels.cu"
-    "csrc/tokenweave_ops/tokenweave_fused_kernels.cu"
 )
 
 Python_add_library(common_ops MODULE USE_SABI ${SKBUILD_SABI_VERSION} WITH_SOABI ${SOURCES})

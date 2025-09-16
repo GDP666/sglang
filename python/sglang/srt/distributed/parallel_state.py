@@ -1586,9 +1586,6 @@ def patch_tensor_parallel_group(tp_group: GroupCoordinator):
         _TP_STATE_PATCHED = False
         _TP = old_tp_group
 
-def get_device_group():
-    """Get the device group for all-reduce."""
-    return get_tp_group().device_group
 
 def get_world_size():
     """Return world size for the world group."""

@@ -1,27 +1,12 @@
 """
 This example demonstrates how to provide tokenized ids to LLM as input instead of text prompt, i.e. a token-in-token-out workflow.
 """
-import sys
-import os
-import subprocess
-
-# 在导入sglang之前设置Python路径
-# sglang_python_path = "/home/guopeng29/sglang052/bin/python3"
-# if sglang_python_path not in sys.path:
-#     sys.path.insert(0, sglang_python_path)
-# 检查当前是否在目标Python环境中
-target_python = "/home/guopeng29/sglang052/bin/python3"
-if sys.executable != target_python and os.path.exists(target_python):
-    print(f"Switching to target Python: {target_python}")
-    # 使用目标Python重新运行当前脚本
-    result = subprocess.run([target_python] + sys.argv)
-    sys.exit(result.returncode)
 
 import sglang as sgl
 from sglang.srt.hf_transformers_utils import get_tokenizer
 
-# MODEL_PATH = "meta-llama/Llama-3.1-8B-Instruct"
-MODEL_PATH = "/mnt/hdfs/zw04mlnn01/checkpoint/llm_platform/model/meta-llama/Meta-Llama-3.1-70B-Instruct/main"
+MODEL_PATH = "meta-llama/Llama-3.1-8B-Instruct"
+
 
 def main():
     # Sample prompts.
@@ -39,11 +24,7 @@ def main():
     token_ids_list = [tokenizer.encode(prompt) for prompt in prompts]
 
     # Create an LLM.
-    llm = sgl.Engine(model_path=MODEL_PATH,
-                     skip_tokenizer_init=True,
-                     tp_size=4,
-                     disable_cuda_graph=True,
-                     disable_radix_cache=True)
+    llm = sgl.Engine(model_path=MODEL_PATH, skip_tokenizer_init=True)
 
     outputs = llm.generate(input_ids=token_ids_list, sampling_params=sampling_params)
     # Print the outputs.

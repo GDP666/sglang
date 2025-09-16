@@ -454,65 +454,9 @@ TORCH_LIBRARY_FRAGMENT(sgl_kernel, m) {
       "qserve_w4a8_per_group_gemm(Tensor _in_feats, Tensor _kernel, Tensor _zeros, Tensor _scales_i8, Tensor _wscales, "
       "Tensor _ascales, Tensor! _out_feats) -> ()");
   m.impl("qserve_w4a8_per_group_gemm", torch::kCUDA, &qserve_w4a8_per_group_gemm);
-
   
-  /*
-   * From csrc/tokenweave_ops
-   */
-  // TokenWeave Kernels
-  m.def(
-      "rms_norm_inplace(Tensor! result, Tensor! input, Tensor weight, float epsilon) -> "
-      "()");
-  m.impl("rms_norm_inplace", torch::kCUDA, &rms_norm_inplace);
 
-  m.def(
-      "fused_rs_ln_ag_cta(Tensor! input, Tensor! residual, Tensor weight, "
-      "int mcptr, int residual_mcptr, int signal_pads, int rank, int world_size, int MAX_CTAS, "
-      "float epsilon) -> ()");
-  m.impl("fused_rs_ln_ag_cta", torch::kCUDA,
-             &fused_rs_ln_ag_cta);
-  
-  // TokenWeave Artifact Kernels
-  m.def(
-      "fused_add_rms_norm_cta(Tensor! input, Tensor! residual, Tensor weight, "
-      "int MAX_CTAS, float epsilon) -> ()");
-  m.impl("fused_add_rms_norm_cta", torch::kCUDA,
-             &fused_add_rms_norm_cta);
 
-  m.def(
-      "fused_rs_ln_cta(Tensor! input, Tensor! residual, Tensor weight, "
-      "int mcptr, int signal_pads, int rank, int world_size, int MAX_CTAS, "
-      "float epsilon) -> ()");
-  m.impl("fused_rs_ln_cta", torch::kCUDA,
-                &fused_rs_ln_cta);
-
-  m.def(
-      "multimem_ar_cta(Tensor input, int mcptr, int signal_pads, "
-      "int rank, int world_size, int MAX_CTAS) -> ()");
-  m.impl("multimem_ar_cta", torch::kCUDA,
-             &multimem_ar_cta);
-
-  m.def(
-      "multimem_rs_cta(Tensor input, int mcptr, int signal_pads, "
-      "int rank, int world_size, int MAX_CTAS) -> ()");
-  m.impl("multimem_rs_cta", torch::kCUDA,
-             &multimem_rs_cta);
-
-  m.def(
-      "multimem_ag_cta(Tensor input, int mcptr, int signal_pads, "
-      "int rank, int world_size, int MAX_CTAS) -> ()");
-  m.impl("multimem_ag_cta", torch::kCUDA,
-             &multimem_ag_cta);
-
-  m.def(
-      "simple_fusion_rs_ln_ag_cta(Tensor! input, Tensor! residual, Tensor weight, "
-      "int mcptr, int signal_pads, int rank, int world_size, int MAX_CTAS, "
-      "float epsilon) -> ()");
-  m.impl("simple_fusion_rs_ln_ag_cta", torch::kCUDA,
-                &simple_fusion_rs_ln_ag_cta);
-  /*
-   * From csrc/mamba
-   */
   m.def(
       "causal_conv1d_update(Tensor! x,"
       "Tensor! conv_state,"
@@ -534,6 +478,17 @@ TORCH_LIBRARY_FRAGMENT(sgl_kernel, m) {
       "bool silu_activation,"
       "int pad_slot_id) -> ()");
   m.impl("causal_conv1d_fwd", torch::kCUDA, &causal_conv1d_fwd);
+
+
+  /*
+   * From csrc/allreduce_rmsnorm_fusion
+   */
+  m.def(
+      "fused_rs_ln_ag_cta(Tensor! input, Tensor! residual, Tensor weight, "
+      "int mcptr, int signal_pads, int rank, int world_size, int MAX_CTAS, "
+      "float epsilon) -> ()");
+  m.impl("fused_rs_ln_ag_cta", torch::kCUDA,
+             &fused_rs_ln_ag_cta);
 }
 
 REGISTER_EXTENSION(common_ops)
